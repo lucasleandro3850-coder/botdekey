@@ -1,12 +1,12 @@
 import discord
 from discord.ext import commands
-from flask import Flask, Response
+from flask import Flask, Response, request
 import random, string, json, threading, os, requests
 
 # --- CONFIGURAÇÃO ---
 TOKEN = os.getenv('TOKEN')
 ARQUIVO_KEYS = 'keys.json'
-# Link RAW do seu script ofuscado (o link "limpo" que testamos)
+# Link RAW do seu script ofuscado
 LINK_MENU_OFCUSCADO = "https://gist.githubusercontent.com/lucasleandro3850-coder/afe334f158cdd53301d8b642bafa855d/raw/script.lua"
 
 def ler_keys():
@@ -36,7 +36,7 @@ def verificar_key():
             else:
                 return "Erro ao baixar menu", 500
         except Exception as e:
-            return "Erro interno", 500
+            return "Erro interno de servidor", 500
     
     # Se a key não existir
     return "invalida", 403
@@ -59,5 +59,7 @@ async def gerar(ctx):
     await ctx.send(f"✅ Chave gerada: `{nova_key}`")
 
 if __name__ == '__main__':
+    # Inicia o Web Server em uma thread
     threading.Thread(target=run_flask).start()
+    # Inicia o Bot
     bot.run(TOKEN)
