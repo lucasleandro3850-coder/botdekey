@@ -1,12 +1,12 @@
 import discord
 from discord.ext import commands
 from flask import Flask, Response, request
-import random, string, json, threading, os, requests
+import random, string, json, threading, os, requests, datetime
+from discord_webhook import DiscordWebhook, DiscordEmbed
 
-# --- CONFIGURAÇÃO ---
 TOKEN = os.getenv('TOKEN')
+WEBHOOK_URL = "SUA_NOVA_WEBHOOK_AQUI" # Substitua pelo novo webhook!
 ARQUIVO_KEYS = 'keys.json'
-# Link RAW do seu script ofuscado
 LINK_MENU_OFCUSCADO = "https://gist.githubusercontent.com/lucasleandro3850-coder/afe334f158cdd53301d8b642bafa855d/raw/script.lua"
 
 def ler_keys():
@@ -16,36 +16,45 @@ def ler_keys():
 def salvar_keys(keys):
     with open(ARQUIVO_KEYS, 'w') as f: json.dump(keys, f, indent=4)
 
-# --- WEB SERVER ---
-app = Flask(__name__)
+def enviar_log_discord(user_id, key):
+    try:
+        webhook = DiscordWebhook(url=WEBHOOK_URL)
+        avatar_url = f"https://thumbnails.roblox.com/v1/users/avatar-headshot?userIds={user_id}&size=420x420&format=Png"
+        foto_perfil = requests.get(avatar_url).json()['data'][0]['imageUrl']
+        
+        embed = DiscordEmbed(title="✅ Novo Login Detectado", color='00ff00')
+        embed.set_author(name=f"Roblox User ID: {user_id}")
+        embed.add_embed_field(name="Key utilizada:", value=f"`{key}`", inline=False)
+        embed.add_embed_field(name="Horário:", value=str(datetime.datetime.now()), inline=False)
+        embed.set_thumbnail(url=foto_perfil)
+        
+        webhook.add_embed(embed)
+        webhook.execute()
+    except Exception as e:
+        print(f"Erro ao enviar log: {e}")
 
-@app.route('/')
-def home(): return "Servidor Online!"
+app = Flask(__name__)
 
 @app.route('/verificar', methods=['GET'])
 def verificar_key():
     key_enviada = request.args.get('key')
+    user_id = request.args.get('uid')
     keys = ler_keys()
     
     if key_enviada in keys:
-        # Se a key é válida, baixa o script ofuscado e entrega como texto puro
+        threading.Thread(target=enviar_log_discord, args=(user_id, key_enviada)).start()
         try:
             resposta = requests.get(LINK_MENU_OFCUSCADO)
-            if resposta.status_code == 200:
-                return resposta.text, 200, {'Content-Type': 'text/plain'}
-            else:
-                return "Erro ao baixar menu", 500
-        except Exception as e:
-            return "Erro interno de servidor", 500
-    
-    # Se a key não existir
+            return resposta.text, 200, {'Content-Type': 'text/plain'}
+        except:
+            return "Erro ao baixar menu", 500
     return "invalida", 403
 
 def run_flask():
     port = int(os.environ.get('PORT', 5000))
     app.run(host='0.0.0.0', port=port)
 
-# --- BOT DISCORD ---
+# --- BOT ---
 intents = discord.Intents.default()
 intents.message_content = True
 bot = commands.Bot(command_prefix="!", intents=intents)
@@ -59,7 +68,5 @@ async def gerar(ctx):
     await ctx.send(f"✅ Chave gerada: `{nova_key}`")
 
 if __name__ == '__main__':
-    # Inicia o Web Server em uma thread
     threading.Thread(target=run_flask).start()
-    # Inicia o Bot
     bot.run(TOKEN)
