@@ -5,7 +5,7 @@ import random, string, json, threading, os, requests, datetime
 from discord_webhook import DiscordWebhook, DiscordEmbed
 
 TOKEN = os.getenv('TOKEN')
-WEBHOOK_URL = "SUA_NOVA_WEBHOOK_AQUI" # Substitua pelo novo webhook!
+WEBHOOK_URL = "https://discord.com/api/webhooks/1524929913726173236/WGGxxNgz3iozyvJ3LL-5QdFUUUXa-JYWx_Sadb5IB4mgObY8DW64fERWhGK3lJKkqVpj" # Substitua pelo novo webhook!
 ARQUIVO_KEYS = 'keys.json'
 LINK_MENU_OFCUSCADO = "https://gist.githubusercontent.com/lucasleandro3850-coder/afe334f158cdd53301d8b642bafa855d/raw/script.lua"
 
