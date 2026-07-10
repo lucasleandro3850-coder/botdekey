@@ -34,7 +34,7 @@ async function getGist() {
 
 // --- API PARA O ROBLOX ---
 
-// Rota 1: Verifica a Key e entrega o Script
+// Rota 1: Verifica a Key e entrega o Script (Usa no Loader)
 app.get('/verificar', async (req, res) => {
     try {
         const { content } = await getGist();
@@ -43,9 +43,8 @@ app.get('/verificar', async (req, res) => {
         if (content.keys[key]) {
             const info = content.keys[key];
             if (info.expires !== -1 && Date.now() > info.expires) {
-                return res.send("INVALID"); // Expirou
+                return res.send("INVALID"); 
             }
-            // Se for válida, o servidor busca o seu menu ofuscado e envia
             const scriptRes = await axios.get(SCRIPT_URL);
             res.send(scriptRes.data);
         } else {
@@ -56,7 +55,26 @@ app.get('/verificar', async (req, res) => {
     }
 });
 
-// Rota 2: Gera o Log de quem usou
+// Rota 2: CHECAGEM RÁPIDA (Usa no Loop de Banimento para o Chute ser Instantâneo)
+app.get('/checar', async (req, res) => {
+    try {
+        const { content } = await getGist();
+        const key = req.query.key;
+        if (content.keys[key]) {
+            const info = content.keys[key];
+            if (info.expires !== -1 && Date.now() > info.expires) {
+                return res.send("INVALID");
+            }
+            res.send("OK"); // Resposta leve apenas para confirmar que a key ainda vale
+        } else {
+            res.send("INVALID");
+        }
+    } catch (e) {
+        res.send('ERROR');
+    }
+});
+
+// Rota 3: Gera o Log de quem usou
 app.get('/log', async (req, res) => {
     const { key, username, userid } = req.query;
     try {
@@ -92,7 +110,6 @@ app.get('/log', async (req, res) => {
 client.on('messageCreate', async (msg) => {
     if (msg.author.bot) return;
 
-    // !gerar 24h ou !gerar perm
     if (msg.content.startsWith('!gerar')) {
         const tipo = msg.content.split(' ')[1] || '24h';
         try {
@@ -107,10 +124,9 @@ client.on('messageCreate', async (msg) => {
             });
 
             msg.reply(`✅ **Key ${tipo.toUpperCase()} Gerada:** \`${novaKey}\``);
-        } catch (e) { msg.reply('❌ Erro ao acessar o Gist. Verifique os Tokens no Render.'); }
+        } catch (e) { msg.reply('❌ Erro no Gist.'); }
     }
 
-    // !banir <key>
     if (msg.content.startsWith('!banir ')) {
         const keyBan = msg.content.split(' ')[1];
         try {
@@ -123,7 +139,6 @@ client.on('messageCreate', async (msg) => {
         } catch (e) { msg.reply('❌ Erro ao banir.'); }
     }
 
-    // !clientes
     if (msg.content === '!clientes') {
         try {
             const { content } = await getGist();
