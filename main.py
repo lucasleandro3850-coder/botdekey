@@ -1,23 +1,29 @@
+import os
+import json
+import time
 from flask import Flask, request
-import json, os, requests, time
+import requests
 
+# Inicializa o Flask
 app = Flask(__name__)
-# O link do seu script ofuscado
-LINK_MENU = "https://gist.githubusercontent.com/lucasleandro3850-coder/afe334f158cdd53301d8b642bafa855d/raw/script.lua"
 
-def ler_keys():
-    try:
-        with open('keys.json', 'r') as f: return json.load(f)
-    except: return {}
-
+# Rota de verificação (o menu vai bater aqui)
 @app.route('/verificar', methods=['GET'])
 def verificar():
     key = request.args.get('key')
-    keys = ler_keys()
+    # Carrega suas keys (coloque o caminho correto do seu arquivo)
+    try:
+        with open('keys.json', 'r') as f:
+            keys = json.load(f)
+    except:
+        keys = {}
+
     if key in keys:
-        # Entrega o script ofuscado
-        return requests.get(LINK_MENU).text, 200, {'Content-Type': 'text/plain'}
+        # Se for válida, entrega o script
+        return requests.get("https://gist.githubusercontent.com/lucasleandro3850-coder/afe334f158cdd53301d8b642bafa855d/raw/script.lua").text, 200, {'Content-Type': 'text/plain'}
+    
     return "invalida", 403
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000)
+    port = int(os.environ.get('PORT', 5000))
+    app.run(host='0.0.0.0', port=port)
