@@ -1,4 +1,3 @@
-// --- Rota de Verificação Inteligente ---
 app.get('/verificar', async (req, res) => {
     try {
         const { content } = await getGist();
@@ -6,27 +5,37 @@ app.get('/verificar', async (req, res) => {
 
         if (content.keys[key]) {
             const info = content.keys[key];
-            if (info.expires !== -1 && Date.now() > info.expires) return res.send("INVALID");
+            const agora = Date.now();
+            
+            if (info.expires !== -1 && agora > info.expires) return res.send("INVALID");
 
-            // Busca o seu menu principal no Gist
+            // Calcula o tempo restante
+            let tempoRestante = "Permanente";
+            if (info.expires !== -1) {
+                const horas = Math.floor((info.expires - agora) / (1000 * 60 * 60));
+                tempoRestante = `${horas} horas restantes`;
+            }
+
+            // Busca seu menu no Gist
             const scriptRes = await axios.get(SCRIPT_URL);
-            let scriptOriginal = scriptRes.data;
-
-            // INJETA O SINAL DE BANIMENTO NO TOPO DO SCRIPT AUTOMATICAMENTE
+            
+            // Injeta o Vigia e a Informação do Tempo
             const codigoSeguranca = `
                 task.spawn(function()
-                    local function check()
-                        local s, r = pcall(function() return game:HttpGet("${process.env.RENDER_EXTERNAL_URL}/checar?key=${key}&t="..tick()) end)
-                        if s and r == "INVALID" then 
-                            game.Players.LocalPlayer:Kick("\\n[SISTEMA]\\nACESSO REVOGADO PELO ADM!") 
+                    local player = game.Players.LocalPlayer
+                    local checkUrl = "https://${process.env.RENDER_EXTERNAL_HOSTNAME}/checar?key=${key}&nocache="
+                    while task.wait(5) do
+                        local s, r = pcall(function() return game:HttpGet(checkUrl .. tostring(tick())) end)
+                        if s and r == "INVALID" then
+                            player:Kick("\\n[NIPOCOS SYSTEM]\\nACESSO REVOGADO OU EXPIRADO!")
+                            break
                         end
                     end
-                    while task.wait(5) do check() end
                 end);
             `;
 
-            // Envia o código de segurança + o seu menu
-            res.send(codigoSeguranca + scriptOriginal);
+            // Envia o tempo restante e o script separados por uma tag especial (|||)
+            res.send(`${tempoRestante}|||${codigoSeguranca}${scriptRes.data}`);
         } else {
             res.send("INVALID");
         }
