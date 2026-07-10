@@ -3,6 +3,7 @@ const express = require('express');
 const axios = require('axios');
 const app = express();
 
+// Carregando variáveis do ambiente (Render)
 const GITHUB_TOKEN = process.env.GITHUB_TOKEN;
 const DISCORD_TOKEN = process.env.DISCORD_TOKEN;
 const GIST_ID = process.env.GIST_ID;
@@ -10,57 +11,73 @@ const SCRIPT_URL = process.env.SCRIPT_URL;
 const WEBHOOK_URL = process.env.DISCORD_WEBHOOK_URL;
 
 const client = new Client({ 
-    intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages, GatewayIntentBits.MessageContent] 
+    intents: [
+        GatewayIntentBits.Guilds, 
+        GatewayIntentBits.GuildMessages, 
+        GatewayIntentBits.MessageContent
+    ] 
 });
 
-// Nome do arquivo dentro do seu Gist de keys
-const KEYS_FILENAME = 'gistfile1.txt'; 
+// Configuração padrão do Axios para o GitHub
+const githubApi = axios.create({
+    baseURL: 'https://api.github.com',
+    headers: { 'Authorization': `token ${GITHUB_TOKEN}` }
+});
 
-// --- API DE VALIDAÇÃO (ROBLOX) ---
+// Função para ler o Gist (Detecta o nome do arquivo automaticamente)
+async function getGist() {
+    const res = await githubApi.get(`/gists/${GIST_ID}`);
+    const fileName = Object.keys(res.data.files)[0];
+    const content = JSON.parse(res.data.files[fileName].content);
+    return { fileName, content };
+}
+
+// --- API PARA O ROBLOX ---
+
+// Rota 1: Verifica a Key e entrega o Script
 app.get('/verificar', async (req, res) => {
     try {
-        const response = await axios.get(`https://api.github.com/gists/${GIST_ID}`);
-        const data = JSON.parse(response.data.files[KEYS_FILENAME].content);
+        const { content } = await getGist();
         const key = req.query.key;
 
-        if (data.keys[key]) {
-            const info = data.keys[key];
+        if (content.keys[key]) {
+            const info = content.keys[key];
             if (info.expires !== -1 && Date.now() > info.expires) {
-                return res.send("INVALID"); // Chave expirada
+                return res.send("INVALID"); // Expirou
             }
-            // Busca o script real e envia para o Roblox
+            // Se for válida, o servidor busca o seu menu ofuscado e envia
             const scriptRes = await axios.get(SCRIPT_URL);
             res.send(scriptRes.data);
         } else {
             res.send("INVALID");
         }
-    } catch (e) { res.send('ERROR'); }
+    } catch (e) {
+        res.send('ERROR');
+    }
 });
 
-// --- ROTA DE LOG E REGISTRO DE USO ---
+// Rota 2: Gera o Log de quem usou
 app.get('/log', async (req, res) => {
     const { key, username, userid } = req.query;
     try {
-        const response = await axios.get(`https://api.github.com/gists/${GIST_ID}`);
-        let data = JSON.parse(response.data.files[KEYS_FILENAME].content);
-
-        if (data.keys[key]) {
-            data.keys[key].used_by = username; // Registra o último usuário
+        const { fileName, content } = await getGist();
+        if (content.keys[key]) {
+            content.keys[key].used_by = username;
             
-            await axios.patch(`https://api.github.com/gists/${GIST_ID}`, {
-                files: { [KEYS_FILENAME]: { content: JSON.stringify(data) } }
-            }, { headers: { 'Authorization': `token ${GITHUB_TOKEN}` } });
+            await githubApi.patch(`/gists/${GIST_ID}`, {
+                files: { [fileName]: { content: JSON.stringify(content) } }
+            });
 
             if (WEBHOOK_URL) {
                 await axios.post(WEBHOOK_URL, {
                     embeds: [{
-                        title: "👤 Script Executado",
+                        title: "🚀 Script Executado",
                         color: 0x00ff00,
                         thumbnail: { url: `https://www.roblox.com/Thumbs/Avatar.ashx?x=150&y=150&userId=${userid}` },
                         fields: [
-                            { name: "Jogador", value: `[${username}](https://www.roblox.com/users/${userid}/profile)`, inline: true },
+                            { name: "Jogador", value: `${username} (${userid})`, inline: true },
                             { name: "Key", value: `\`${key}\``, inline: true },
-                            { name: "Tipo", value: data.keys[key].expires === -1 ? "Permanente" : "24 Horas", inline: true }
+                            { name: "Expiração", value: content.keys[key].expires === -1 ? "Permanente" : "24 Horas", inline: true }
                         ]
                     }]
                 });
@@ -70,7 +87,8 @@ app.get('/log', async (req, res) => {
     } catch (e) { res.send('ERROR'); }
 });
 
-// --- COMANDOS DO BOT DO DISCORD ---
+// --- COMANDOS DO BOT NO DISCORD ---
+
 client.on('messageCreate', async (msg) => {
     if (msg.author.bot) return;
 
@@ -78,32 +96,29 @@ client.on('messageCreate', async (msg) => {
     if (msg.content.startsWith('!gerar')) {
         const tipo = msg.content.split(' ')[1] || '24h';
         try {
-            const response = await axios.get(`https://api.github.com/gists/${GIST_ID}`);
-            let data = JSON.parse(response.data.files[KEYS_FILENAME].content);
-            
+            const { fileName, content } = await getGist();
             const novaKey = 'NC-' + Math.random().toString(36).substring(2, 10).toUpperCase();
             let expira = tipo === '24h' ? Date.now() + (24 * 60 * 60 * 1000) : -1;
 
-            data.keys[novaKey] = { expires: expira, used_by: null, type: tipo };
+            content.keys[novaKey] = { expires: expira, used_by: null, type: tipo };
 
-            await axios.patch(`https://api.github.com/gists/${GIST_ID}`, {
-                files: { [KEYS_FILENAME]: { content: JSON.stringify(data) } }
-            }, { headers: { 'Authorization': `token ${GITHUB_TOKEN}` } });
+            await githubApi.patch(`/gists/${GIST_ID}`, {
+                files: { [fileName]: { content: JSON.stringify(content) } }
+            });
 
             msg.reply(`✅ **Key ${tipo.toUpperCase()} Gerada:** \`${novaKey}\``);
-        } catch (e) { msg.reply('❌ Erro ao acessar Gist. Verifique o GIST_ID e o TOKEN.'); }
+        } catch (e) { msg.reply('❌ Erro ao acessar o Gist. Verifique os Tokens no Render.'); }
     }
 
     // !banir <key>
     if (msg.content.startsWith('!banir ')) {
         const keyBan = msg.content.split(' ')[1];
         try {
-            const response = await axios.get(`https://api.github.com/gists/${GIST_ID}`);
-            let data = JSON.parse(response.data.files[KEYS_FILENAME].content);
-            delete data.keys[keyBan];
-            await axios.patch(`https://api.github.com/gists/${GIST_ID}`, {
-                files: { [KEYS_FILENAME]: { content: JSON.stringify(data) } }
-            }, { headers: { 'Authorization': `token ${GITHUB_TOKEN}` } });
+            const { fileName, content } = await getGist();
+            delete content.keys[keyBan];
+            await githubApi.patch(`/gists/${GIST_ID}`, {
+                files: { [fileName]: { content: JSON.stringify(content) } }
+            });
             msg.reply(`🚫 Key \`${keyBan}\` foi deletada e banida.`);
         } catch (e) { msg.reply('❌ Erro ao banir.'); }
     }
@@ -111,17 +126,16 @@ client.on('messageCreate', async (msg) => {
     // !clientes
     if (msg.content === '!clientes') {
         try {
-            const response = await axios.get(`https://api.github.com/gists/${GIST_ID}`);
-            let data = JSON.parse(response.data.files[KEYS_FILENAME].content);
-            let lista = "📋 **Lista de Keys e Clientes:**\n\n";
-            for (let k in data.keys) {
-                lista += `🔑 \`${k}\` | 👤 \`${data.keys[k].used_by || "Livre"}\` | ⏳ \`${data.keys[k].type}\`\n`;
+            const { content } = await getGist();
+            let lista = "📋 **Lista de Keys Ativas:**\n\n";
+            for (let k in content.keys) {
+                lista += `🔑 \`${k}\` | 👤 \`${content.keys[k].used_by || "Livre"}\` | ⏳ \`${content.keys[k].type}\`\n`;
             }
-            msg.reply(lista || "Nenhuma key gerada ainda.");
+            msg.reply(lista || "Nenhuma key encontrada.");
         } catch (e) { msg.reply('❌ Erro ao listar.'); }
     }
 });
 
-client.once('ready', () => console.log('SISTEMA ONLINE!'));
+client.once('ready', () => console.log('SISTEMA ONLINE E BOT LOGADO!'));
 client.login(DISCORD_TOKEN);
 app.listen(3000);
