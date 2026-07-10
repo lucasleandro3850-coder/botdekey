@@ -3,32 +3,78 @@ const express = require('express');
 const axios = require('axios');
 const app = express();
 
+// Configurações via Variáveis de Ambiente do Render
 const GITHUB_TOKEN = process.env.GITHUB_TOKEN;
 const DISCORD_TOKEN = process.env.DISCORD_TOKEN;
 const GIST_ID = process.env.GIST_ID;
 
-const client = new Client({ intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages, GatewayIntentBits.MessageContent] });
+const client = new Client({ 
+    intents: [
+        GatewayIntentBits.Guilds, 
+        GatewayIntentBits.GuildMessages, 
+        GatewayIntentBits.MessageContent
+    ] 
+});
 
-// --- SEU SCRIPT OFUSCADO AQUI ---
-const MEU_MENU_OFUSCADO = `
-https://gist.githubusercontent.com/lucasleandro3850-coder/afe334f158cdd53301d8b642bafa855d/raw/9cf877bc728266b94d616822ae8589ff47f149fb/script.lua
-`;
-// --------------------------------
-
+// API de Validação (Roblox acessa isso)
 app.get('/verificar', async (req, res) => {
     try {
         const response = await axios.get(`https://api.github.com/gists/${GIST_ID}`);
         const data = JSON.parse(response.data.files['keys.json'].content);
-        if (data.keys.includes(req.query.key)) {
-            res.send(MEU_MENU_OFUSCADO); // Entrega o menu se a key for válida
-        } else {
-            res.send("game.Players.LocalPlayer:Kick('Key Invalida')");
-        }
-    } catch { res.send("game.Players.LocalPlayer:Kick('Erro no Servidor')"); }
+        const key = req.query.key;
+        res.send(data.keys.includes(key) ? 'OK' : 'INVALID');
+    } catch (e) { 
+        res.send('ERROR'); 
+    }
 });
 
-// [O restante do código do Bot que você já tinha...]
-// (Pode manter os comandos /gerar e /banir abaixo normalmente)
+client.once('ready', () => {
+    console.log(`BOT ESTÁ ONLINE NO DISCORD! Logado como: ${client.user.tag}`);
+});
 
-client.login(DISCORD_TOKEN);
-app.listen(3000);
+client.on('messageCreate', async (msg) => {
+    if (msg.author.bot) return;
+
+    // Comando /gerar
+    if (msg.content === '/gerar') {
+        try {
+            const response = await axios.get(`https://api.github.com/gists/${GIST_ID}`);
+            let data = JSON.parse(response.data.files['keys.json'].content);
+            
+            const novaKey = 'KEY-' + Math.random().toString(36).substring(2, 10).toUpperCase();
+            data.keys.push(novaKey);
+            
+            await axios.patch(`https://api.github.com/gists/${GIST_ID}`, {
+                files: { 'keys.json': { content: JSON.stringify(data) } }
+            }, { headers: { 'Authorization': `token ${GITHUB_TOKEN}` } });
+            
+            msg.reply('✅ Key gerada: `' + novaKey + '`');
+        } catch (e) {
+            console.error("Erro ao gerar:", e);
+            msg.reply('❌ Erro ao gerar key. Verifique os logs.');
+        }
+    }
+
+    // Comando /banir <key>
+    if (msg.content.startsWith('/banir ')) {
+        const keyBan = msg.content.split(' ')[1];
+        try {
+            const response = await axios.get(`https://api.github.com/gists/${GIST_ID}`);
+            let data = JSON.parse(response.data.files['keys.json'].content);
+            
+            data.keys = data.keys.filter(k => k !== keyBan);
+            
+            await axios.patch(`https://api.github.com/gists/${GIST_ID}`, {
+                files: { 'keys.json': { content: JSON.stringify(data) } }
+            }, { headers: { 'Authorization': `token ${GITHUB_TOKEN}` } });
+            
+            msg.reply('🚫 Key banida: `' + keyBan + '`');
+        } catch (e) {
+            console.error("Erro ao banir:", e);
+            msg.reply('❌ Erro ao banir key.');
+        }
+    }
+});
+
+client.login(DISCORD_TOKEN).catch(err => console.error("FALHA NO LOGIN:", err));
+app.listen(3000, () => console.log('API rodando na porta 3000'));
