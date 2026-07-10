@@ -1,45 +1,23 @@
-import discord
-from discord.ext import commands
 from flask import Flask, request
-import threading, os, requests, time, json
+import json, os, requests, time
 
 app = Flask(__name__)
-TOKEN = os.getenv('TOKEN')
+# O link do seu script ofuscado
+LINK_MENU = "https://gist.githubusercontent.com/lucasleandro3850-coder/afe334f158cdd53301d8b642bafa855d/raw/script.lua"
 
-@app.route('/')
-def home():
-    return "Nipocos API Online"
+def ler_keys():
+    try:
+        with open('keys.json', 'r') as f: return json.load(f)
+    except: return {}
 
-# Rota simples de verificação (o menu lê daqui)
 @app.route('/verificar', methods=['GET'])
 def verificar():
     key = request.args.get('key')
-    # Carrega as keys do arquivo local
-    try:
-        with open('keys.json', 'r') as f: keys = json.load(f)
-        if key in keys:
-            # Aqui você entrega o seu script ofuscado
-            return "CODIGO_OFUSCADO_AQUI", 200
-    except: pass
+    keys = ler_keys()
+    if key in keys:
+        # Entrega o script ofuscado
+        return requests.get(LINK_MENU).text, 200, {'Content-Type': 'text/plain'}
     return "invalida", 403
 
-def run_flask():
+if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000)
-
-# Inicia o Flask
-threading.Thread(target=run_flask).start()
-
-# Inicia o Bot
-intents = discord.Intents.default()
-intents.message_content = True
-bot = commands.Bot(command_prefix="!", intents=intents)
-
-@bot.event
-async def on_ready():
-    print(f'Bot logado como {bot.user}')
-
-@bot.command()
-async def gerar(ctx):
-    await ctx.send("Comando de gerar key...")
-
-bot.run(TOKEN)
