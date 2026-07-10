@@ -1,23 +1,45 @@
+import discord
+from discord.ext import commands
 from flask import Flask, request
-import json, os, requests, time
+import threading, os, requests, time, json
 
 app = Flask(__name__)
-# O Render atualiza os arquivos do GitHub a cada commit
-def ler_keys():
-    try:
-        with open('keys.json', 'r') as f: return json.load(f)
-    except: return {}
+TOKEN = os.getenv('TOKEN')
 
+@app.route('/')
+def home():
+    return "Nipocos API Online"
+
+# Rota simples de verificação (o menu lê daqui)
 @app.route('/verificar', methods=['GET'])
 def verificar():
     key = request.args.get('key')
-    keys = ler_keys()
-    if key in keys:
-        dados = keys[key]
-        # Se for perm ou 24h válida
-        if dados['tipo'] == 'perm' or (time.time() - dados['criado'] < 86400):
-            return requests.get("LINK_DO_SEU_GIST_OFUSCADO").text, 200, {'Content-Type': 'text/plain'}
+    # Carrega as keys do arquivo local
+    try:
+        with open('keys.json', 'r') as f: keys = json.load(f)
+        if key in keys:
+            # Aqui você entrega o seu script ofuscado
+            return "CODIGO_OFUSCADO_AQUI", 200
+    except: pass
     return "invalida", 403
 
-if __name__ == '__main__':
+def run_flask():
     app.run(host='0.0.0.0', port=5000)
+
+# Inicia o Flask
+threading.Thread(target=run_flask).start()
+
+# Inicia o Bot
+intents = discord.Intents.default()
+intents.message_content = True
+bot = commands.Bot(command_prefix="!", intents=intents)
+
+@bot.event
+async def on_ready():
+    print(f'Bot logado como {bot.user}')
+
+@bot.command()
+async def gerar(ctx):
+    await ctx.send("Comando de gerar key...")
+
+bot.run(TOKEN)
